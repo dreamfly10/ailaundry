@@ -50,6 +50,9 @@ export const authOptions: NextAuthOptions = {
             email: user.email!,
             name: user.name || undefined,
             image: user.image || undefined,
+            userType: 'trial',
+            tokensUsed: 0,
+            tokenLimit: 100000, // 100k tokens for trial users
           });
         }
       }

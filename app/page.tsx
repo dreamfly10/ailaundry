@@ -3,6 +3,7 @@
 import { useSession } from 'next-auth/react';
 import ArticleProcessor from '@/components/ArticleProcessor';
 import AuthButtons from '@/components/AuthButtons';
+import { TokenUsage } from '@/components/TokenUsage';
 
 export default function Home() {
   const { data: session, status } = useSession();
@@ -19,7 +20,10 @@ export default function Home() {
       </div>
 
       {session ? (
-        <ArticleProcessor />
+        <>
+          <TokenUsage />
+          <ArticleProcessor />
+        </>
       ) : (
         <div className="card">
           <h2>Welcome</h2>

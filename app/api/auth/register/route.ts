@@ -26,11 +26,14 @@ export async function POST(request: Request) {
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Create user
+    // Create user with trial defaults
     const user = await db.user.create({
       email,
       password: hashedPassword,
       name,
+      userType: 'trial',
+      tokensUsed: 0,
+      tokenLimit: 100000, // 100k tokens for trial users
     });
 
     return NextResponse.json(

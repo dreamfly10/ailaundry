@@ -33,12 +33,37 @@ export default function ArticleProcessor() {
         }),
       });
 
+      // Read response as text first to handle both JSON and HTML responses
+      const text = await response.text();
+      
       if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || 'Failed to process article');
+        // Try to parse as JSON, fallback to text if it fails
+        let errorMessage = 'Failed to process article';
+        let errorData: any = null;
+        try {
+          errorData = JSON.parse(text);
+          errorMessage = errorData.message || errorData.error || errorMessage;
+          
+          // Handle token limit error specifically
+          if (errorData.upgradeRequired) {
+            errorMessage = `${errorMessage}\n\nYou have used ${errorData.tokensUsed?.toLocaleString()} of ${errorData.limit?.toLocaleString()} tokens. Please upgrade to continue.`;
+          }
+        } catch {
+          // If response is HTML (like a redirect page), show a more helpful error
+          if (text.includes('<!DOCTYPE') || text.includes('<html')) {
+            errorMessage = 'Server returned an error page. Please check if you are authenticated and try again.';
+          } else {
+            errorMessage = text.substring(0, 200) || errorMessage;
+          }
+        }
+        
+        const error = new Error(errorMessage);
+        (error as any).upgradeRequired = errorData?.upgradeRequired;
+        throw error;
       }
 
-      const data = await response.json();
+      // Parse the successful JSON response
+      const data = JSON.parse(text);
       setResult(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
@@ -96,8 +121,33 @@ export default function ArticleProcessor() {
         </button>
 
         {error && (
-          <div style={{ color: 'red', marginTop: '1rem' }}>
-            Error: {error}
+          <div style={{ 
+            color: 'red', 
+            marginTop: '1rem',
+            padding: '1rem',
+            background: '#fee',
+            borderRadius: '4px',
+            border: '1px solid #c00'
+          }}>
+            <div style={{ marginBottom: '0.5rem' }}>
+              <strong>Error:</strong> {error}
+            </div>
+            {(error as any).upgradeRequired && (
+              <button
+                onClick={() => window.location.href = '/upgrade'}
+                style={{
+                  padding: '0.5rem 1rem',
+                  background: '#007bff',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  marginTop: '0.5rem'
+                }}
+              >
+                Upgrade to Paid
+              </button>
+            )}
           </div>
         )}
 
