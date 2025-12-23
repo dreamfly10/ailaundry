@@ -13,7 +13,7 @@ export async function POST(request: Request) {
     // Update user to paid status
     const updatedUser = await db.user.update(session.user.id, {
       userType: 'paid',
-      tokenLimit: 10000000, // 10M tokens for paid users (effectively unlimited)
+      tokenLimit: 1000000, // 1M tokens for paid users per month
       subscriptionStatus: 'active',
       subscriptionExpiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days from now
     });

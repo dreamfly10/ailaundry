@@ -1,6 +1,88 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { loadStripe } from '@stripe/stripe-js';
+
+const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!);
+
+function UpgradeButton() {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleUpgrade = async () => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const response = await fetch('/api/create-checkout-session', {
+        method: 'POST',
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        const errorMsg = data.details || data.error || data.message || 'Failed to create checkout session';
+        throw new Error(errorMsg);
+      }
+
+      const { sessionId, url } = await response.json();
+
+      // Redirect to Stripe Checkout
+      if (url) {
+        window.location.href = url;
+      } else if (sessionId) {
+        const stripe = await stripePromise;
+        if (stripe) {
+          const { error: stripeError } = await stripe.redirectToCheckout({ sessionId });
+          if (stripeError) {
+            throw stripeError;
+          }
+        } else {
+          throw new Error('Stripe failed to load');
+        }
+      } else {
+        throw new Error('No checkout URL or session ID received');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An error occurred');
+      setLoading(false);
+    }
+  };
+
+  return (
+    <>
+      <button
+        onClick={handleUpgrade}
+        disabled={loading}
+        className="button primary"
+        style={{
+          padding: '0.5rem 1rem',
+          fontSize: '0.875rem',
+          cursor: loading ? 'not-allowed' : 'pointer',
+          opacity: loading ? 0.6 : 1
+        }}
+      >
+        {loading ? 'Loading...' : 'Upgrade'}
+      </button>
+      {error && (
+        <div style={{
+          position: 'absolute',
+          top: '100%',
+          right: 0,
+          marginTop: '0.5rem',
+          padding: '0.5rem',
+          background: 'var(--color-error)',
+          color: 'white',
+          borderRadius: 'var(--radius-sm)',
+          fontSize: '0.75rem',
+          zIndex: 1000,
+          whiteSpace: 'nowrap'
+        }}>
+          {error}
+        </div>
+      )}
+    </>
+  );
+}
 
 interface TokenUsage {
   allowed: boolean;
@@ -70,25 +152,37 @@ export function TokenUsage() {
       borderColor: isExceeded ? 'var(--color-error)' : isLow ? 'var(--color-warning)' : 'var(--color-border)',
       borderWidth: isExceeded || isLow ? '2px' : '1px'
     }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-        <h3 style={{ margin: 0, fontSize: '1rem' }}>
-          Token Usage {usage.userType === 'paid' && <span style={{ color: '#28a745' }}>(Paid)</span>}
-        </h3>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem', position: 'relative' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-sm)' }}>
+          <h3 style={{ margin: 0, fontSize: '1rem' }}>Token Usage</h3>
+          {usage.userType === 'trial' ? (
+            <span style={{ 
+              padding: '0.25rem 0.5rem',
+              background: 'rgba(245, 158, 11, 0.1)',
+              color: 'var(--color-warning)',
+              borderRadius: 'var(--radius-sm)',
+              fontSize: '0.75rem',
+              fontWeight: 600,
+              border: '1px solid var(--color-warning)'
+            }}>
+              Trial Plan
+            </span>
+          ) : (
+            <span style={{ 
+              padding: '0.25rem 0.5rem',
+              background: 'rgba(16, 185, 129, 0.1)',
+              color: '#28a745',
+              borderRadius: 'var(--radius-sm)',
+              fontSize: '0.75rem',
+              fontWeight: 600,
+              border: '1px solid #28a745'
+            }}>
+              Paid Plan
+            </span>
+          )}
+        </div>
         {usage.userType === 'trial' && (
-          <button
-            onClick={() => window.location.href = '/upgrade'}
-            style={{
-              padding: '0.5rem 1rem',
-              background: '#007bff',
-              color: 'white',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: 'pointer',
-              fontSize: '0.875rem'
-            }}
-          >
-            Upgrade
-          </button>
+          <UpgradeButton />
         )}
       </div>
 

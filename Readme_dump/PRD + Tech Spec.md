@@ -10,6 +10,7 @@ A modern web application that translates articles to Chinese and generates insig
 - ✅ **Modern UI**: Responsive design with gradient effects and smooth animations
 - ✅ **Optional Google Auth**: Works with or without Google OAuth
 - ✅ **Supabase Integration**: PostgreSQL database with proper RLS configuration
+- ✅ **Stripe Payment Integration**: Secure payment processing with Stripe Checkout
 
 ## Overview
 
@@ -22,6 +23,7 @@ This application allows users to input an article link or raw text, automaticall
 - **High-Quality Translation**: AI-powered translation to Simplified Chinese
 - **Contextual Insights**: In-depth analysis and interpretation for Chinese-speaking audiences with multiple writing style options
 - **Token Management**: Usage tracking with trial (1,000 tokens) and paid tiers
+- **Payment Processing**: Stripe Checkout integration for secure subscription payments
 - **Subscription Detection**: Automatic detection of paywalled content with guided workflow
 - **Error Handling**: User-friendly error messages with actionable guidance
 - **Modern UI**: Responsive design with gradient effects and smooth animations
@@ -93,7 +95,7 @@ Result Rendering with Error Handling
 1. User attempts to process article
 2. System checks token availability
 3. If insufficient tokens → Display upgrade prompt
-4. User upgrades to paid plan (unlimited tokens)
+4. User upgrades to paid plan (1M tokens/month)
 5. User continues processing
 
 ## Environment Variables
@@ -117,11 +119,18 @@ GOOGLE_CLIENT_SECRET=your_google_client_secret
 
 # Application Configuration
 NEXT_PUBLIC_BASE_URL=http://localhost:3000
+
+# Stripe Configuration
+NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=your_stripe_publishable_key
+STRIPE_SECRET_KEY=your_stripe_secret_key
+STRIPE_WEBHOOK_SECRET=your_stripe_webhook_secret
+STRIPE_PRICE_ID=your_stripe_price_id
 ```
 
 ### Required vs Optional
 - **Required**: OpenAI API key, Supabase credentials (URL, anon key, service role key), NextAuth secret
 - **Optional**: Google OAuth credentials (app works with email/password only if not provided)
+- **Payment**: Stripe credentials required for payment functionality (app works without it, but upgrade won't process payments)
 
 ## API Endpoints
 
@@ -197,6 +206,37 @@ Creates a new user account with email and password.
   "name": "Optional Name"
 }
 ```
+
+### `POST /api/create-checkout-session`
+
+Creates a Stripe Checkout session for subscription payment. Requires authentication.
+
+**Success Response**
+
+```json
+{
+  "sessionId": "cs_...",
+  "url": "https://checkout.stripe.com/..."
+}
+```
+
+**Error Response**
+
+```json
+{
+  "error": "Unauthorized",
+  "message": "Please sign in to continue"
+}
+```
+
+### `POST /api/webhooks/stripe`
+
+Stripe webhook endpoint for payment events. Handles:
+- `checkout.session.completed` - Upgrades user to paid
+- `customer.subscription.updated` - Updates subscription status
+- `customer.subscription.deleted` - Downgrades user to trial
+- `invoice.payment_succeeded` - Extends subscription
+- `invoice.payment_failed` - Logs payment failure
 
 ### `GET /api/token-usage`
 
@@ -281,9 +321,13 @@ For detailed setup instructions, see [SETUP.md](./SETUP.md) and [SUPABASE_SETUP.
 - **Usage Tracking**: Real-time display with progress bar
 
 ### Paid Users
-- **Token Limit**: Effectively unlimited (10M tokens)
-- **Usage Tracking**: Still tracked for analytics
-- **No Restrictions**: Can process articles of any size
+- **Token Limit**: 1,000,000 tokens per month
+- **Monthly Reset**: Token usage resets to 0 on each subscription renewal
+- **Subscription**: Monthly recurring subscription via Stripe
+- **Price**: $9.99/month (configurable)
+- **Usage Tracking**: Tracked and enforced - users cannot exceed 1M tokens per month
+- **Subscription Enforcement**: Token limit enforced based on active subscription status
+- **Payment**: Secure payment processing through Stripe Checkout
 
 ### Token Calculation
 - Rough estimation: ~4 characters = 1 token
@@ -352,6 +396,26 @@ For detailed setup instructions, see [SETUP.md](./SETUP.md) and [SUPABASE_SETUP.
 - Clear visual feedback
 - Accessible design patterns
 
+## Payment System
+
+### Stripe Integration
+
+The app uses Stripe Checkout for secure payment processing:
+
+- **Checkout Flow**: User clicks upgrade → Stripe Checkout → Payment → Webhook updates user
+- **Webhook Security**: All webhooks verified with Stripe signatures
+- **Subscription Management**: Automatic handling of renewals, cancellations, and failures
+- **Test Mode**: Full testing support with Stripe test cards
+
+### Setup Required
+
+1. Stripe account and API keys
+2. Product and Price creation in Stripe Dashboard
+3. Webhook endpoint configuration
+4. Environment variables (see Environment Variables section)
+
+For detailed setup instructions, see [STRIPE_SETUP.md](./STRIPE_SETUP.md)
+
 ## Future Enhancements
 
 - Saved translation history
@@ -361,6 +425,8 @@ For detailed setup instructions, see [SETUP.md](./SETUP.md) and [SUPABASE_SETUP.
 - Team/organization accounts
 - Advanced analytics dashboard
 - Multi-language support (beyond Chinese)
+- Subscription management page (cancel, update payment method)
+- Payment history view
 
 ## Development Notes
 
@@ -369,6 +435,7 @@ For detailed setup instructions, see [SETUP.md](./SETUP.md) and [SUPABASE_SETUP.
 - **Style System**: 5 writing archetypes configured in `lib/prompt-styles.ts` - easily extensible
 - **Style Selection**: Users can choose writing style via UI dropdown; defaults to "warmBookish"
 - **Temperature Control**: Each style has optimized temperature (0.7-0.85) for best results
+- **Stripe Integration**: Secure payment processing with webhook-based user upgrades
 - Token usage is tracked per request
 - Database uses Supabase with Row Level Security (RLS)
 - Server-side operations use service role key to bypass RLS

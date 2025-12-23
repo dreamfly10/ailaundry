@@ -24,8 +24,9 @@ export default function SignIn() {
     });
     
     // Clear error from URL if present (NextAuth redirects with error param)
+    // Only clear if it's in the URL, but don't show error until user actually tries to sign in
     if (errorParam === 'CredentialsSignin') {
-      // Clear the error from URL
+      // Clear the error from URL immediately so it doesn't show on page load
       const newUrl = window.location.pathname + (callbackUrl !== '/' ? `?callbackUrl=${encodeURIComponent(callbackUrl)}` : '');
       window.history.replaceState({}, '', newUrl);
     }
@@ -98,7 +99,7 @@ export default function SignIn() {
           <button type="submit" disabled={loading} style={{ width: '100%', marginTop: 'var(--spacing-md)' }}>
             {loading ? 'Signing in...' : 'Sign In'}
           </button>
-          {(error || errorParam === 'CredentialsSignin') && (
+          {error && (
             <div style={{ 
               color: 'var(--color-error)', 
               marginTop: 'var(--spacing-md)',
@@ -107,7 +108,7 @@ export default function SignIn() {
               borderRadius: 'var(--radius-md)',
               fontSize: '0.875rem'
             }}>
-              {error || 'Invalid email or password. Please try again.'}
+              {error}
             </div>
           )}
         </form>

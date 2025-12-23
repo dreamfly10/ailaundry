@@ -1,13 +1,30 @@
 'use client';
 
 import { useSession } from 'next-auth/react';
+import { useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import ArticleProcessor from '@/components/ArticleProcessor';
 import AuthButtons from '@/components/AuthButtons';
-import { TokenUsage } from '@/components/TokenUsage';
+import { UserHomePage } from '@/components/UserHomePage';
+import { SupportForm } from '@/components/SupportForm';
 import Link from 'next/link';
 
 export default function Home() {
   const { data: session, status } = useSession();
+  const searchParams = useSearchParams();
+  const [showSupport, setShowSupport] = useState(false);
+
+  // Handle upgrade success redirect
+  useEffect(() => {
+    const upgradeSuccess = searchParams?.get('upgrade');
+    if (upgradeSuccess === 'success') {
+      // Refresh to show updated status
+      setTimeout(() => {
+        window.history.replaceState({}, '', '/');
+        window.location.reload();
+      }, 2000);
+    }
+  }, [searchParams]);
 
   if (status === 'loading') {
     return (
@@ -25,16 +42,28 @@ export default function Home() {
           <Link href="/" style={{ textDecoration: 'none', color: 'inherit' }}>
             <h1 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 700 }}>AI Translate</h1>
           </Link>
-          <AuthButtons session={session} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-md)' }}>
+            <button
+              onClick={() => setShowSupport(true)}
+              className="outline"
+              style={{ 
+                fontSize: '0.875rem',
+                padding: '0.5rem 1rem',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem'
+              }}
+            >
+              💬 Support
+            </button>
+            <AuthButtons session={session} />
+          </div>
         </div>
       </nav>
 
       <main>
         {session ? (
-          <div className="container" style={{ paddingTop: 'var(--spacing-xl)', paddingBottom: 'var(--spacing-3xl)' }}>
-            <TokenUsage />
-            <ArticleProcessor />
-          </div>
+          <UserHomePage />
         ) : (
           <>
             {/* Hero Section */}
@@ -163,7 +192,10 @@ export default function Home() {
           <p style={{ marginBottom: 'var(--spacing-sm)' }}>© 2025 AI Translate. All rights reserved.</p>
           <p style={{ fontSize: '0.875rem' }}>Transforming content with intelligence and precision.</p>
         </div>
-      </footer>
+          </footer>
+
+      {/* Support Form Modal */}
+      <SupportForm isOpen={showSupport} onClose={() => setShowSupport(false)} />
     </>
   );
 }

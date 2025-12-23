@@ -1,0 +1,316 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+
+interface Article {
+  id: string;
+  title: string;
+  createdAt: string;
+  inputType: 'url' | 'text';
+  sourceUrl?: string;
+}
+
+interface ArticleHistoryProps {
+  onSelectArticle: (articleId: string) => void;
+  selectedArticleId?: string | null;
+  refreshTrigger?: number;
+}
+
+export function ArticleHistory({ onSelectArticle, selectedArticleId, refreshTrigger }: ArticleHistoryProps) {
+  const [articles, setArticles] = useState<Article[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchArticles = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const response = await fetch('/api/articles?limit=50');
+      const data = await response.json();
+      
+      // Check for specific error types
+      if (data.error === 'DATABASE_UNAVAILABLE') {
+        setError('DATABASE_UNAVAILABLE');
+        setArticles([]);
+        return;
+      }
+      
+      if (data.error === 'DATABASE_NOT_SETUP') {
+        // Table doesn't exist - show empty state (user needs to run migration)
+        setError(null);
+        setArticles([]);
+        return;
+      }
+      
+      if (!response.ok && data.error) {
+        // Other errors
+        setError(data.error === 'DATABASE_UNAVAILABLE' ? 'DATABASE_UNAVAILABLE' : 'FETCH_ERROR');
+        setArticles([]);
+        return;
+      }
+      
+      // Success - set articles
+      setArticles(data.articles || []);
+      setError(null);
+    } catch (err) {
+      // Network or other errors
+      console.error('Error fetching articles:', err);
+      setError('DATABASE_UNAVAILABLE');
+      setArticles([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchArticles();
+  }, [refreshTrigger]);
+
+  const handleDelete = async (articleId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!confirm('Are you sure you want to delete this article?')) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/articles?id=${articleId}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to delete article');
+      }
+
+      // Remove from local state
+      setArticles(articles.filter(a => a.id !== articleId));
+      
+      // If deleted article was selected, clear selection
+      if (selectedArticleId === articleId) {
+        onSelectArticle('');
+      }
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to delete article');
+    }
+  };
+
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays < 7) return `${diffDays}d ago`;
+    
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  };
+
+  return (
+    <div style={{
+      width: '280px',
+      height: '100vh',
+      background: 'var(--color-background-secondary)',
+      borderRight: '1px solid var(--color-border)',
+      display: 'flex',
+      flexDirection: 'column',
+      overflow: 'hidden',
+    }}>
+      <div style={{
+        padding: 'var(--spacing-lg)',
+        borderBottom: '1px solid var(--color-border)',
+      }}>
+        <h2 style={{ 
+          margin: 0, 
+          fontSize: '1.125rem', 
+          fontWeight: 600,
+          color: 'var(--color-text-primary)'
+        }}>
+          Article History
+        </h2>
+        <p style={{
+          margin: 'var(--spacing-xs) 0 0 0',
+          fontSize: '0.75rem',
+          color: 'var(--color-text-secondary)'
+        }}>
+          {loading ? '...' : error === 'DATABASE_UNAVAILABLE' ? 'Unavailable' : `${articles.length} ${articles.length === 1 ? 'article' : 'articles'}`}
+        </p>
+      </div>
+
+      <div style={{
+        flex: 1,
+        overflowY: 'auto',
+        padding: 'var(--spacing-sm)',
+      }}>
+        {loading ? (
+          <div style={{
+            padding: 'var(--spacing-lg)',
+            textAlign: 'center',
+            color: 'var(--color-text-secondary)',
+            fontSize: '0.875rem'
+          }}>
+            Loading...
+          </div>
+        ) : error === 'DATABASE_UNAVAILABLE' ? (
+          <div style={{
+            padding: 'var(--spacing-md)',
+            background: 'rgba(239, 68, 68, 0.1)',
+            borderRadius: 'var(--radius-md)',
+            border: '1px solid var(--color-error)',
+            margin: 'var(--spacing-md)',
+          }}>
+            <div style={{
+              color: 'var(--color-error)',
+              fontSize: '0.875rem',
+              fontWeight: 500,
+              marginBottom: 'var(--spacing-xs)'
+            }}>
+              ⚠️ Database Unavailable
+            </div>
+            <div style={{
+              color: 'var(--color-text-secondary)',
+              fontSize: '0.75rem',
+              lineHeight: 1.5
+            }}>
+              We're having trouble connecting to the database. Your articles are safe, but we can't display them right now. Please try again later.
+            </div>
+          </div>
+        ) : articles.length === 0 ? (
+          <div style={{
+            padding: 'var(--spacing-lg)',
+            textAlign: 'center',
+          }}>
+            <div style={{
+              fontSize: '2rem',
+              marginBottom: 'var(--spacing-md)',
+              opacity: 0.3
+            }}>
+              📄
+            </div>
+            <div style={{
+              color: 'var(--color-text-primary)',
+              fontSize: '0.875rem',
+              fontWeight: 500,
+              marginBottom: 'var(--spacing-xs)'
+            }}>
+              No articles yet
+            </div>
+            <div style={{
+              color: 'var(--color-text-secondary)',
+              fontSize: '0.75rem',
+              lineHeight: 1.5,
+              marginTop: 'var(--spacing-sm)'
+            }}>
+              Process your first article using the form on the right to see it appear here!
+            </div>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-xs)' }}>
+            {articles.map((article) => (
+              <div
+                key={article.id}
+                onClick={() => onSelectArticle(article.id)}
+                style={{
+                  padding: 'var(--spacing-md)',
+                  borderRadius: 'var(--radius-md)',
+                  cursor: 'pointer',
+                  background: selectedArticleId === article.id 
+                    ? 'var(--color-primary)' 
+                    : 'transparent',
+                  color: selectedArticleId === article.id 
+                    ? 'white' 
+                    : 'var(--color-text-primary)',
+                  transition: 'all var(--transition-base)',
+                  position: 'relative',
+                  border: selectedArticleId === article.id 
+                    ? '1px solid var(--color-primary)' 
+                    : '1px solid transparent',
+                }}
+                onMouseEnter={(e) => {
+                  if (selectedArticleId !== article.id) {
+                    e.currentTarget.style.background = 'var(--color-background)';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (selectedArticleId !== article.id) {
+                    e.currentTarget.style.background = 'transparent';
+                  }
+                }}
+              >
+                <div style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'flex-start',
+                  gap: 'var(--spacing-sm)',
+                }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{
+                      fontSize: '0.875rem',
+                      fontWeight: 500,
+                      marginBottom: 'var(--spacing-xs)',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}>
+                      {article.title}
+                    </div>
+                    <div style={{
+                      fontSize: '0.75rem',
+                      opacity: selectedArticleId === article.id ? 0.9 : 0.6,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 'var(--spacing-xs)',
+                    }}>
+                      <span>{formatDate(article.createdAt)}</span>
+                      {article.inputType === 'url' && (
+                        <span>•</span>
+                      )}
+                      {article.inputType === 'url' && (
+                        <span style={{ fontSize: '0.7rem' }}>🔗</span>
+                      )}
+                    </div>
+                  </div>
+                  <button
+                    onClick={(e) => handleDelete(article.id, e)}
+                    style={{
+                      background: 'transparent',
+                      border: 'none',
+                      color: selectedArticleId === article.id ? 'rgba(255,255,255,0.7)' : 'var(--color-text-tertiary)',
+                      cursor: 'pointer',
+                      padding: '0.25rem',
+                      fontSize: '0.875rem',
+                      borderRadius: 'var(--radius-sm)',
+                      transition: 'all var(--transition-base)',
+                      flexShrink: 0,
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = selectedArticleId === article.id 
+                        ? 'rgba(255,255,255,0.2)' 
+                        : 'rgba(239, 68, 68, 0.1)';
+                      e.currentTarget.style.color = selectedArticleId === article.id 
+                        ? 'white' 
+                        : 'var(--color-error)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = 'transparent';
+                      e.currentTarget.style.color = selectedArticleId === article.id 
+                        ? 'rgba(255,255,255,0.7)' 
+                        : 'var(--color-text-tertiary)';
+                    }}
+                    title="Delete article"
+                  >
+                    ×
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+

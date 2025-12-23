@@ -29,12 +29,24 @@ export async function checkTokenLimit(userId: string): Promise<{
   const tokensRemaining = user.tokenLimit - user.tokensUsed;
   
   // For trial users, strictly enforce the limit - no processing if limit is reached
-  // For paid users, allow unlimited usage
+  // For paid users, enforce the 1M token monthly limit
   const isTrialUser = user.userType === 'trial';
+  const isPaidUser = user.userType === 'paid';
   const hasRemainingTokens = tokensRemaining > 0;
   
+  // Check if subscription is still active for paid users
+  let subscriptionActive = true;
+  if (isPaidUser && user.subscriptionExpiresAt) {
+    subscriptionActive = new Date(user.subscriptionExpiresAt) > new Date();
+  }
+  
+  // Paid users can use tokens if subscription is active and they have remaining tokens
+  // Trial users can only use tokens if they have remaining tokens
+  const allowed = (isPaidUser && subscriptionActive && hasRemainingTokens) || 
+                  (isTrialUser && hasRemainingTokens);
+  
   return {
-    allowed: user.userType === 'paid' || (isTrialUser && hasRemainingTokens),
+    allowed,
     tokensUsed: user.tokensUsed,
     tokensRemaining: Math.max(0, tokensRemaining),
     limit: user.tokenLimit,
@@ -51,19 +63,12 @@ export async function consumeTokens(userId: string, tokens: number): Promise<voi
     throw new Error('User not found');
   }
   
-  // For paid users, we might want unlimited tokens or a higher limit
-  // For now, we'll still track usage but allow it
-  if (user.userType === 'paid') {
-    // Paid users can have unlimited tokens, but we still track usage
-    await db.user.update(userId, {
-      tokensUsed: user.tokensUsed + tokens,
-    });
-  } else {
-    // Trial users have a limit
-    await db.user.update(userId, {
-      tokensUsed: user.tokensUsed + tokens,
-    });
-  }
+  // Track token usage for both trial and paid users
+  // Paid users have a 1M token monthly limit that resets with subscription renewal
+  // Trial users have a 1K token limit
+  await db.user.update(userId, {
+    tokensUsed: user.tokensUsed + tokens,
+  });
 }
 
 /**

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { parseError, AppError } from '@/lib/error-handler';
 import SubscriptionRequired from './SubscriptionRequired';
 import { StyleArchetype, styleArchetypes, getDefaultStyle } from '@/lib/prompt-styles';
@@ -10,9 +10,15 @@ interface ProcessResult {
   insights: string;
   requiresSubscription?: boolean;
   style?: StyleArchetype;
+  articleId?: string;
 }
 
-export default function ArticleProcessor() {
+interface ArticleProcessorProps {
+  selectedArticleId?: string | null;
+  onArticleProcessed?: () => void;
+}
+
+export default function ArticleProcessor({ selectedArticleId, onArticleProcessed }: ArticleProcessorProps) {
   const [inputType, setInputType] = useState<'url' | 'text'>('url');
   const [content, setContent] = useState('');
   const [style, setStyle] = useState<StyleArchetype>(getDefaultStyle());
@@ -20,6 +26,54 @@ export default function ArticleProcessor() {
   const [result, setResult] = useState<ProcessResult | null>(null);
   const [error, setError] = useState<AppError | null>(null);
   const [subscriptionUrl, setSubscriptionUrl] = useState<string | null>(null);
+  const [loadingArticle, setLoadingArticle] = useState(false);
+
+  // Load article when selectedArticleId changes
+  useEffect(() => {
+    if (selectedArticleId) {
+      loadArticle(selectedArticleId);
+    } else {
+      // Clear result when no article is selected
+      setResult(null);
+      setContent('');
+      setError(null);
+    }
+  }, [selectedArticleId]);
+
+  const loadArticle = async (articleId: string) => {
+    setLoadingArticle(true);
+    setError(null);
+    try {
+      const response = await fetch(`/api/articles/${articleId}`);
+      if (!response.ok) {
+        throw new Error('Failed to load article');
+      }
+      const data = await response.json();
+      const article = data.article;
+
+      // Populate form with article data
+      setInputType(article.inputType);
+      setContent(article.inputType === 'url' ? (article.sourceUrl || '') : article.originalContent);
+      setStyle(article.style || getDefaultStyle());
+      
+      // Set result to display translation and insights
+      setResult({
+        translation: article.translatedContent,
+        insights: article.insights,
+        style: article.style || getDefaultStyle(),
+        articleId: article.id,
+      });
+    } catch (err) {
+      setError({
+        code: 'LOAD_ERROR',
+        message: 'Failed to load article',
+        userMessage: err instanceof Error ? err.message : 'Failed to load article',
+        actionable: 'Please try again or select a different article.',
+      });
+    } finally {
+      setLoadingArticle(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -109,8 +163,19 @@ export default function ArticleProcessor() {
         setSubscriptionUrl(content);
         setResult(null);
       } else {
-        setResult(data);
+        setResult({
+          translation: data.translation,
+          insights: data.insights,
+          requiresSubscription: data.requiresSubscription,
+          style: data.style,
+          articleId: data.articleId,
+        });
         setSubscriptionUrl(null);
+      }
+
+      // Trigger refresh of article history
+      if (onArticleProcessed) {
+        onArticleProcessed();
       }
     } catch (err) {
       const parsedError = parseError(err);
@@ -133,6 +198,18 @@ export default function ArticleProcessor() {
 
   return (
     <div>
+      {loadingArticle && (
+        <div style={{
+          padding: 'var(--spacing-md)',
+          background: 'var(--color-background-secondary)',
+          borderRadius: 'var(--radius-md)',
+          marginBottom: 'var(--spacing-md)',
+          textAlign: 'center',
+          color: 'var(--color-text-secondary)'
+        }}>
+          Loading article...
+        </div>
+      )}
       <form onSubmit={handleSubmit} className="card">
         <h2>Process Article</h2>
         
@@ -145,46 +222,64 @@ export default function ArticleProcessor() {
           borderRadius: 'var(--radius-md)'
         }}>
           <label style={{ 
+            position: 'relative',
             display: 'flex', 
             alignItems: 'center', 
-            gap: 'var(--spacing-sm)',
+            justifyContent: 'center',
             cursor: 'pointer',
             flex: 1,
             padding: 'var(--spacing-sm)',
             borderRadius: 'var(--radius-sm)',
             background: inputType === 'url' ? 'var(--color-primary)' : 'transparent',
             color: inputType === 'url' ? 'white' : 'var(--color-text-primary)',
-            transition: 'all var(--transition-base)'
+            transition: 'all var(--transition-base)',
+            textAlign: 'center'
           }}>
             <input
               type="radio"
               value="url"
               checked={inputType === 'url'}
               onChange={(e) => setInputType(e.target.value as 'url' | 'text')}
-              style={{ margin: 0, cursor: 'pointer' }}
+              style={{ 
+                position: 'absolute',
+                opacity: 0,
+                width: 0,
+                height: 0,
+                margin: 0,
+                cursor: 'pointer'
+              }}
             />
-            URL
+            <span style={{ width: '100%', textAlign: 'center' }}>URL</span>
           </label>
           <label style={{ 
+            position: 'relative',
             display: 'flex', 
             alignItems: 'center', 
-            gap: 'var(--spacing-sm)',
+            justifyContent: 'center',
             cursor: 'pointer',
             flex: 1,
             padding: 'var(--spacing-sm)',
             borderRadius: 'var(--radius-sm)',
             background: inputType === 'text' ? 'var(--color-primary)' : 'transparent',
             color: inputType === 'text' ? 'white' : 'var(--color-text-primary)',
-            transition: 'all var(--transition-base)'
+            transition: 'all var(--transition-base)',
+            textAlign: 'center'
           }}>
             <input
               type="radio"
               value="text"
               checked={inputType === 'text'}
               onChange={(e) => setInputType(e.target.value as 'url' | 'text')}
-              style={{ margin: 0, cursor: 'pointer' }}
+              style={{ 
+                position: 'absolute',
+                opacity: 0,
+                width: 0,
+                height: 0,
+                margin: 0,
+                cursor: 'pointer'
+              }}
             />
-            Raw Text
+            <span style={{ width: '100%', textAlign: 'center' }}>Raw Text</span>
           </label>
         </div>
 
@@ -287,7 +382,10 @@ export default function ArticleProcessor() {
             )}
             {(error.code === 'TOKEN_LIMIT_REACHED' || error.code === 'INSUFFICIENT_TOKENS') && (
               <button
-                onClick={() => window.location.href = '/upgrade'}
+                onClick={() => {
+                  // Scroll to Paid Plan Benefits section on home page
+                  window.location.href = '/#paid-plan';
+                }}
                 style={{ marginTop: 'var(--spacing-md)' }}
               >
                 Upgrade to Paid Plan
