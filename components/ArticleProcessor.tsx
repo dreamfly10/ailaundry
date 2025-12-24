@@ -69,6 +69,7 @@ export default function ArticleProcessor({ selectedArticleId, onArticleProcessed
         message: 'Failed to load article',
         userMessage: err instanceof Error ? err.message : 'Failed to load article',
         actionable: 'Please try again or select a different article.',
+        statusCode: 500,
       });
     } finally {
       setLoadingArticle(false);

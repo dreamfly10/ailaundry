@@ -58,9 +58,11 @@ export async function POST(request: Request) {
         
         if (session.subscription) {
           try {
-            const subscription = await stripe.subscriptions.retrieve(session.subscription);
-            subscriptionExpiresAt = new Date(subscription.current_period_end * 1000);
-            console.log(`Subscription period ends at: ${subscriptionExpiresAt.toISOString()}`);
+            const subscription = await stripe.subscriptions.retrieve(session.subscription) as any;
+            if (subscription.current_period_end) {
+              subscriptionExpiresAt = new Date(subscription.current_period_end * 1000);
+              console.log(`Subscription period ends at: ${subscriptionExpiresAt.toISOString()}`);
+            }
           } catch (err) {
             console.error('Error retrieving subscription:', err);
             // Use fallback date
@@ -129,7 +131,7 @@ export async function POST(request: Request) {
           tokenLimit: 1000,
           tokensUsed: 0, // Reset token usage when downgrading
           subscriptionStatus: 'cancelled',
-          paymentId: null,
+          paymentId: undefined,
         });
 
         console.log(`Successfully downgraded user ${userId} to trial`);
@@ -142,7 +144,7 @@ export async function POST(request: Request) {
         
         if (subscriptionId) {
           // Get subscription to find user
-          const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+          const subscription = await stripe.subscriptions.retrieve(subscriptionId) as any;
           const userId = subscription.metadata?.userId;
 
           if (userId) {
@@ -156,7 +158,9 @@ export async function POST(request: Request) {
             // Prepare update data
             const updateData: any = {
               subscriptionStatus: 'active',
-              subscriptionExpiresAt: new Date(subscription.current_period_end * 1000),
+              subscriptionExpiresAt: subscription.current_period_end 
+                ? new Date(subscription.current_period_end * 1000) 
+                : undefined,
               tokenLimit: 1000000, // Ensure 1M tokens on renewal
             };
             
@@ -178,7 +182,7 @@ export async function POST(request: Request) {
         const subscriptionId = invoice.subscription;
         
         if (subscriptionId) {
-          const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+          const subscription = await stripe.subscriptions.retrieve(subscriptionId) as any;
           const userId = subscription.metadata?.userId;
 
           if (userId) {

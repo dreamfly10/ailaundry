@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { loadStripe } from '@stripe/stripe-js';
@@ -8,7 +8,7 @@ import { TokenUsage } from '@/components/TokenUsage';
 
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!);
 
-export default function UpgradePage() {
+function UpgradePageContent() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -62,7 +62,7 @@ export default function UpgradePage() {
         // Fallback: use Stripe.js redirect
         const stripe = await stripePromise;
         if (stripe) {
-          const { error: stripeError } = await stripe.redirectToCheckout({ sessionId });
+          const { error: stripeError } = await (stripe as any).redirectToCheckout({ sessionId });
           if (stripeError) {
             throw stripeError;
           }
@@ -188,6 +188,20 @@ export default function UpgradePage() {
         </div>
       </div>
     </main>
+  );
+}
+
+export default function UpgradePage() {
+  return (
+    <Suspense fallback={
+      <main className="container">
+        <div style={{ maxWidth: '800px', margin: '0 auto', paddingTop: 'var(--spacing-xl)' }}>
+          <div>Loading...</div>
+        </div>
+      </main>
+    }>
+      <UpgradePageContent />
+    </Suspense>
   );
 }
 

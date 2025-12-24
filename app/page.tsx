@@ -1,7 +1,7 @@
 'use client';
 
 import { useSession } from 'next-auth/react';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import ArticleProcessor from '@/components/ArticleProcessor';
 import AuthButtons from '@/components/AuthButtons';
@@ -9,7 +9,7 @@ import { UserHomePage } from '@/components/UserHomePage';
 import { SupportForm } from '@/components/SupportForm';
 import Link from 'next/link';
 
-export default function Home() {
+function HomeContent() {
   const { data: session, status } = useSession();
   const searchParams = useSearchParams();
   const [showSupport, setShowSupport] = useState(false);
@@ -197,6 +197,18 @@ export default function Home() {
       {/* Support Form Modal */}
       <SupportForm isOpen={showSupport} onClose={() => setShowSupport(false)} />
     </>
+  );
+}
+
+export default function Home() {
+  return (
+    <Suspense fallback={
+      <div className="container" style={{ paddingTop: '4rem', textAlign: 'center' }}>
+        <div style={{ fontSize: '1.25rem', color: 'var(--color-text-secondary)' }}>Loading...</div>
+      </div>
+    }>
+      <HomeContent />
+    </Suspense>
   );
 }
 

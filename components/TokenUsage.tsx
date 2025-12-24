@@ -32,7 +32,7 @@ function UpgradeButton() {
       } else if (sessionId) {
         const stripe = await stripePromise;
         if (stripe) {
-          const { error: stripeError } = await stripe.redirectToCheckout({ sessionId });
+          const { error: stripeError } = await (stripe as any).redirectToCheckout({ sessionId });
           if (stripeError) {
             throw stripeError;
           }
