@@ -4,13 +4,17 @@
 
 A modern web application that translates articles to Chinese and generates insights using OpenAI. Features include:
 
-- ✅ **Token-based Usage**: Trial users get 1,000 tokens, enforced strictly
+- ✅ **Token-based Usage**: Trial users get 1,000 tokens, enforced strictly; Paid users get 1,000,000 tokens/month
 - ✅ **Subscription Detection**: Automatically detects paywalled content with guided workflow
 - ✅ **Error Handling**: User-friendly error messages with actionable guidance
 - ✅ **Modern UI**: Responsive design with gradient effects and smooth animations
 - ✅ **Optional Google Auth**: Works with or without Google OAuth
 - ✅ **Supabase Integration**: PostgreSQL database with proper RLS configuration
 - ✅ **Stripe Payment Integration**: Secure payment processing with Stripe Checkout
+- ✅ **Article History**: Sidebar displaying all previously processed articles (ChatGPT-style)
+- ✅ **Support System**: Contact form with Resend email integration
+- ✅ **Auto Sign-Out**: Automatic logout after 5 minutes of inactivity with warning
+- ✅ **Article Title Extraction**: Intelligent title extraction from URLs
 
 ## Overview
 
@@ -22,12 +26,16 @@ This application allows users to input an article link or raw text, automaticall
 - **Article Processing**: URL extraction or direct text input
 - **High-Quality Translation**: AI-powered translation to Simplified Chinese
 - **Contextual Insights**: In-depth analysis and interpretation for Chinese-speaking audiences with multiple writing style options
-- **Token Management**: Usage tracking with trial (1,000 tokens) and paid tiers
+- **Token Management**: Usage tracking with trial (1,000 tokens) and paid tiers (1,000,000 tokens/month)
 - **Payment Processing**: Stripe Checkout integration for secure subscription payments
 - **Subscription Detection**: Automatic detection of paywalled content with guided workflow
 - **Error Handling**: User-friendly error messages with actionable guidance
 - **Modern UI**: Responsive design with gradient effects and smooth animations
-- **Style System**: 5 writing style archetypes for natural, engaging insights (warm bookish, life reflection, contrarian, education, science) 
+- **Style System**: 5 writing style archetypes for natural, engaging insights (warm bookish, life reflection, contrarian, education, science)
+- **Article History**: Persistent storage and sidebar display of all processed articles (similar to ChatGPT)
+- **Support System**: Contact form integrated with Resend email service
+- **Auto Sign-Out**: Security feature that automatically signs out users after 5 minutes of inactivity
+- **Article Title Extraction**: Intelligent extraction of article titles from web pages 
 
 ## Tech Stack
 
@@ -44,11 +52,11 @@ This application allows users to input an article link or raw text, automaticall
 ```
 User Authentication (NextAuth)
    ↓
-Token Limit Check (Trial: 1,000 tokens)
+Token Limit Check (Trial: 1,000 tokens / Paid: 1,000,000 tokens)
    ↓
 User Input (URL or Text)
    ↓
-Content Extraction / Subscription Detection
+Content Extraction / Title Extraction / Subscription Detection
    ↓
 [If Subscription Required]
    ↓
@@ -60,27 +68,38 @@ Token Estimation & Validation
    ↓
 OpenAI Translation (GPT-4o-mini)
    ↓
-OpenAI Insight Generation (GPT-4o)
+OpenAI Insight Generation (GPT-4o) with Selected Style
    ↓
 Token Consumption & Update
    ↓
+Save Article to Database (Title, Content, Translation, Insights, Metadata)
+   ↓
 Result Rendering with Error Handling
+   ↓
+Article Appears in History Sidebar
 ```
 
 ## User Flow
 
 ### Standard Flow
 1. User signs up or signs in (Email/Password or optional Google SSO)
-2. System checks token availability (Trial: 1,000 tokens)
-3. User pastes article URL or raw text
-4. System extracts and validates content
-5. If subscription required → Show subscription workflow
-6. System estimates token usage and validates availability
-7. User selects writing style (optional, defaults to "warm bookish")
-8. System translates content into Chinese (GPT-4o-mini)
-9. System generates insights and interpretation (GPT-4o) using selected style
-10. System consumes tokens and updates usage
-11. User views translation and insights
+2. System checks token availability (Trial: 1,000 tokens / Paid: 1,000,000 tokens)
+3. User sees homepage with:
+   - Token Usage component (showing user status: Trial Plan or Paid Plan)
+   - Article History sidebar (left side, showing previously processed articles)
+   - Article Processor (main content area)
+   - Paid Plan Benefits (only shown for trial users)
+4. User pastes article URL or raw text
+5. System extracts content and article title from URL (if applicable)
+6. If subscription required → Show subscription workflow
+7. System estimates token usage and validates availability
+8. User selects writing style (optional, defaults to "warm bookish")
+9. System translates content into Chinese (GPT-4o-mini)
+10. System generates insights and interpretation (GPT-4o) using selected style
+11. System consumes tokens and updates usage
+12. System saves article to database (title, content, translation, insights, metadata)
+13. User views translation and insights
+14. Article automatically appears in Article History sidebar
 
 ### Subscription-Required Flow
 1. User pastes URL requiring subscription
@@ -125,12 +144,18 @@ NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=your_stripe_publishable_key
 STRIPE_SECRET_KEY=your_stripe_secret_key
 STRIPE_WEBHOOK_SECRET=your_stripe_webhook_secret
 STRIPE_PRICE_ID=your_stripe_price_id
+
+# Resend Email Configuration (for Support Form)
+RESEND_API_KEY=your_resend_api_key
+RESEND_FROM_EMAIL=AI Translate <onboarding@resend.dev>
+SUPPORT_EMAIL=haofu99@gmail.com
 ```
 
 ### Required vs Optional
 - **Required**: OpenAI API key, Supabase credentials (URL, anon key, service role key), NextAuth secret
 - **Optional**: Google OAuth credentials (app works with email/password only if not provided)
 - **Payment**: Stripe credentials required for payment functionality (app works without it, but upgrade won't process payments)
+- **Email**: Resend credentials required for support form (app works without it, but support form won't send emails)
 
 ## API Endpoints
 
@@ -251,6 +276,95 @@ Returns current token usage statistics for authenticated user.
   "tokensRemaining": 850,
   "limit": 1000,
   "userType": "trial"
+}
+```
+
+### `GET /api/articles`
+
+Returns list of articles for authenticated user. Supports pagination via `limit` query parameter.
+
+**Query Parameters**
+- `limit` (optional): Maximum number of articles to return (default: 50)
+
+**Response**
+
+```json
+{
+  "articles": [
+    {
+      "id": "uuid",
+      "title": "Article Title",
+      "createdAt": "2024-01-01T00:00:00Z",
+      "inputType": "url",
+      "sourceUrl": "https://example.com/article"
+    }
+  ]
+}
+```
+
+**Error Responses**
+- `DATABASE_NOT_SETUP`: Articles table doesn't exist
+- `DATABASE_UNAVAILABLE`: Database connection error
+
+### `GET /api/articles/[id]`
+
+Returns a single article by ID. Ensures article belongs to authenticated user.
+
+**Response**
+
+```json
+{
+  "article": {
+    "id": "uuid",
+    "title": "Article Title",
+    "originalContent": "Original text...",
+    "translatedContent": "Translated text...",
+    "insights": "Insights text...",
+    "inputType": "url",
+    "sourceUrl": "https://example.com/article",
+    "style": "warmBookish",
+    "tokensUsed": 150,
+    "createdAt": "2024-01-01T00:00:00Z"
+  }
+}
+```
+
+### `DELETE /api/articles`
+
+Deletes an article by ID. Requires authentication and ownership.
+
+**Query Parameters**
+- `id`: Article ID to delete
+
+**Response**
+
+```json
+{
+  "success": true
+}
+```
+
+### `POST /api/support`
+
+Sends a support request email via Resend. No authentication required.
+
+**Request**
+
+```json
+{
+  "name": "User Name",
+  "email": "user@example.com",
+  "subject": "Support Subject",
+  "message": "Support message content"
+}
+```
+
+**Response**
+
+```json
+{
+  "success": true,
+  "message": "Support request sent successfully"
 }
 ```
 
@@ -384,8 +498,13 @@ For detailed setup instructions, see [SETUP.md](./SETUP.md) and [SUPABASE_SETUP.
 - **Responsive**: Mobile-friendly layout
 
 ### Components
-- **Hero Section**: Gradient text, feature cards, CTA buttons
-- **Navigation**: Sticky header with smooth transitions
+- **Hero Section**: Gradient text, feature cards, CTA buttons (shown to non-authenticated users)
+- **Navigation**: Sticky header with smooth transitions, includes Support button
+- **Token Usage Component**: Displays current usage with progress bar, shows user status badge (Trial Plan / Paid Plan), includes Upgrade button for trial users
+- **Article History Sidebar**: Left sidebar (280px) displaying all processed articles in ChatGPT-style layout
+- **Article Processor**: Main content area for input and results
+- **Paid Plan Benefits**: Only shown to trial users (hidden for paid users)
+- **Support Form**: Modal form accessible from navigation
 - **Forms**: Modern input styling with focus states
 - **Cards**: Elevated design with hover effects
 - **Error Messages**: User-friendly with actionable guidance
@@ -395,6 +514,9 @@ For detailed setup instructions, see [SETUP.md](./SETUP.md) and [SUPABASE_SETUP.
 - Smooth transitions and animations
 - Clear visual feedback
 - Accessible design patterns
+- Auto sign-out warning at 4 minutes, sign-out at 5 minutes of inactivity
+- Article history automatically refreshes after processing new article
+- Click on article in history to load and view it
 
 ## Payment System
 
@@ -416,9 +538,83 @@ The app uses Stripe Checkout for secure payment processing:
 
 For detailed setup instructions, see [STRIPE_SETUP.md](./STRIPE_SETUP.md)
 
+## Article History Feature
+
+### Overview
+The app stores all processed articles in a database table and displays them in a sidebar similar to ChatGPT's conversation history.
+
+### Features
+- **Persistent Storage**: All processed articles are saved to `articles` table in Supabase
+- **Sidebar Display**: Left sidebar (280px) shows article history
+- **Article Metadata**: Each article stores:
+  - Title (extracted from URL or generated from content)
+  - Original content
+  - Translated content
+  - Insights
+  - Input type (URL or text)
+  - Source URL (if applicable)
+  - Writing style used
+  - Tokens consumed
+  - Creation timestamp
+- **Article Loading**: Click on any article in history to load and view it
+- **Article Deletion**: Delete button (×) on each article item
+- **Empty State**: Friendly message when no articles exist
+- **Error Handling**: Graceful handling of database errors with user-friendly messages
+
+### Database Schema
+See `supabase/articles_schema.sql` for complete schema definition.
+
+## Support System
+
+### Overview
+Integrated support form that sends emails via Resend API.
+
+### Features
+- **Support Button**: Accessible from navigation bar (💬 Support)
+- **Modal Form**: Opens as modal overlay
+- **Form Fields**: Name, Email, Subject, Message (all required)
+- **Email Integration**: Uses Resend API to send emails to configured support email
+- **Validation**: Client and server-side validation
+- **Success Feedback**: Shows success message and auto-closes after 2 seconds
+
+### Configuration
+- `RESEND_API_KEY`: Resend API key
+- `RESEND_FROM_EMAIL`: Sender email address
+- `SUPPORT_EMAIL`: Recipient email address (defaults to haofu99@gmail.com)
+
+## Auto Sign-Out Feature
+
+### Overview
+Security feature that automatically signs out users after 5 minutes of inactivity.
+
+### Behavior
+- **Inactivity Detection**: Tracks mouse movements, clicks, keyboard input, scroll, touch events
+- **Warning**: Shows warning notification at 4 minutes ("You will be signed out in 1 minute due to inactivity")
+- **Auto Sign-Out**: Automatically signs out user at 5 minutes
+- **Timer Reset**: Any user activity resets the timer
+- **Scope**: Only applies to signed-in users
+
+## Article Title Extraction
+
+### Overview
+Intelligent extraction of article titles from web pages when processing URLs.
+
+### Process
+1. Tries multiple HTML selectors in order of preference:
+   - `h1.article-title`
+   - `h1.post-title`
+   - `h1.entry-title`
+   - `article h1`
+   - `[role="article"] h1`
+   - `h1`
+   - `<title>` tag
+2. Cleans extracted title (removes extra whitespace, site name separators)
+3. Limits to 200 characters
+4. Falls back to page title if no article title found
+5. Falls back to hostname + URL snippet if no title available
+
 ## Future Enhancements
 
-- Saved translation history
 - Bulk processing
 - Export formats (PDF, DOCX)
 - User profiles and preferences
@@ -427,6 +623,8 @@ For detailed setup instructions, see [STRIPE_SETUP.md](./STRIPE_SETUP.md)
 - Multi-language support (beyond Chinese)
 - Subscription management page (cancel, update payment method)
 - Payment history view
+- Article search and filtering
+- Article sharing capabilities
 
 ## Development Notes
 
@@ -436,12 +634,18 @@ For detailed setup instructions, see [STRIPE_SETUP.md](./STRIPE_SETUP.md)
 - **Style Selection**: Users can choose writing style via UI dropdown; defaults to "warmBookish"
 - **Temperature Control**: Each style has optimized temperature (0.7-0.85) for best results
 - **Stripe Integration**: Secure payment processing with webhook-based user upgrades
+- **Article History**: All processed articles are saved to database (optional feature - app works even if table doesn't exist)
+- **Title Extraction**: Intelligent title extraction from URLs improves article history UX
 - Token usage is tracked per request
 - Database uses Supabase with Row Level Security (RLS)
 - Server-side operations use service role key to bypass RLS
 - Google OAuth is optional - app gracefully handles missing credentials
+- Resend email is optional - app works without it, but support form won't send emails
 - Error handling follows industry best practices
 - All user-facing errors are translated to friendly messages
+- **User Status Display**: Token Usage component shows "Trial Plan" or "Paid Plan" badge
+- **Conditional UI**: Paid Plan Benefits only shown to trial users
+- **Auto Sign-Out**: Implemented via React hook (`useAutoSignOut`) with 5-minute timeout
 
 ---
 
