@@ -26,6 +26,16 @@ export async function GET(request: Request) {
       hasWebhookSecret: !!process.env.STRIPE_WEBHOOK_SECRET,
       webhookSecretPrefix: process.env.STRIPE_WEBHOOK_SECRET?.substring(0, 10) || 'NOT SET',
     },
+    nextAuth: {
+      hasNextAuthUrl: !!process.env.NEXTAUTH_URL,
+      nextAuthUrl: process.env.NEXTAUTH_URL || 'NOT SET',
+      expectedCallbackUrl: process.env.NEXTAUTH_URL 
+        ? `${process.env.NEXTAUTH_URL}/api/auth/callback/google`
+        : 'NOT SET (NEXTAUTH_URL missing)',
+      hasNextAuthSecret: !!process.env.NEXTAUTH_SECRET,
+      hasGoogleClientId: !!process.env.GOOGLE_CLIENT_ID,
+      hasGoogleClientSecret: !!process.env.GOOGLE_CLIENT_SECRET,
+    },
     nodeEnv: process.env.NODE_ENV,
   };
 
